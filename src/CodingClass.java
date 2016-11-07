@@ -21,10 +21,14 @@ public class CodingClass {
 
     byte[] readArr;
 
-
-    public byte[] readFromFile(String filePath){
+    public CodingClass(int mode, String filePath){
         this.filePath = filePath;
         fileName = new File(filePath).getName();
+    }
+
+
+    public byte[] readFromFile(String filePath){
+
         ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
         InputStream input = null;
         try {
