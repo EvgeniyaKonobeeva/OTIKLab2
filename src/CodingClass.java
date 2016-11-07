@@ -1,5 +1,7 @@
 import java.io.*;
+import java.nio.ByteBuffer;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Created by Evgenia on 08.10.2016.
@@ -14,6 +16,10 @@ public class CodingClass {
     private String fileName;
 
     private String filePath;
+
+    String msg ;
+
+    byte[] readArr;
 
 
     public byte[] readFromFile(String filePath){
@@ -39,7 +45,6 @@ public class CodingClass {
             return null;
         }
     }
-
 
     public void countDelRepeats(byte[] byteArr){
 
@@ -133,8 +138,15 @@ public class CodingClass {
 
     public void PrintRes(){
         for(Map.Entry<Byte, ArrayList<Integer>> entry : resultBytesCode.entrySet()){
-            System.out.println(Integer.toHexString(Byte.toUnsignedInt(entry.getKey())) + " " + entry.getValue());
+            System.out.println(entry.getKey() + " " + soutArr(entry.getValue()));
         }
+    }
+    private String soutArr(ArrayList list){
+        StringBuilder sb = new StringBuilder();
+        for(int i = 0; i < list.size(); i++){
+            sb.append(list.get(i) + ", ");
+        }
+        return sb.toString();
     }
 
     public void returnCodeResults(){
@@ -151,20 +163,190 @@ public class CodingClass {
     }
 
     public void codeFile(){
-        byte[] arr = readFromFile(filePath);
-        for(int i = 0; i < arr.length; i++){
-            if(resultBytesCode.containsKey(arr[i])){
-                FileWriter fileWriter = null;
-                try {
-                    fileWriter = new FileWriter(new File("C:\\Users\\Evgenia\\IdeaProjects\\OTIKLab2\\ResultsCode\\" + fileName), true);
-                    fileWriter.append(resultBytesCode.get(arr[i]).toString());
-                }catch (IOException e) {
-                    e.printStackTrace();
-                }
+        readArr = readFromFile(filePath);
+        StringBuilder sb = new StringBuilder();
+
+        for(int i = 0; i < readArr.length; i++){
+            if(resultBytesCode.containsKey(readArr[i])){
+                sb.append(resultBytesCode.get(readArr[i]).toString().replaceAll("[,\\]\\[\\s]*", ""));
+            }else{
+                System.out.println("not contain byte " + readArr[i]);
             }
+        }
+
+        msg = sb.toString();
+        DataOutputStream os = null;
+        try {
+            os = new DataOutputStream(new FileOutputStream("C:\\Users\\Evgenia\\IdeaProjects\\OTIKLab2\\ResultsCode\\ttt3.bin"));
+            byte[] b = codeKeysMapToBytes(resultBytesCode);
+            int size = b.length;
+            os.write(((Integer)size).byteValue());
+            os.write(codeKeysMapToBytes(resultBytesCode));
+            os.write(getBits(sb.toString()));
+            os.close();
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
         }
     }
 
-//    protected void
+    public byte[] getBits(String str) {
+        String s = "00000000";
+        int strSize = str.length();
+        int byteArrSize = (int) Math.ceil((double) strSize / 8.0);
+        int remainder = strSize % 8;
+        str = str + s.substring(0, 8 - remainder);
+        byte[] b = new byte[byteArrSize];
+        int count = 0;
+        for (int i = 0; i < str.length(); i += 8) {
+            int val = Integer.parseInt(str.substring(i, i + 8), 2);
+            b[count++] = ((Integer) val).byteValue();
+
+        }
+        return b;
+    }
+
+    public byte[] codeKeysMapToBytes( Map<Byte, ArrayList<Integer>> map){
+        ArrayList<Byte> b = new ArrayList<>();
+        for(Map.Entry<Byte, ArrayList<Integer>> entry : map.entrySet()){
+            b.add(entry.getKey());
+            b.add(((Integer)entry.getValue().size()).byteValue());
+            b.add(getBits(entry.getValue().toString().replaceAll("[,\\]\\[\\s]*",""))[0]);
+        }
+        byte[] bytes = new byte[b.size()];
+        for(int i = 0; i < b.size(); i++){
+            bytes[i] = b.get(i);
+        }
+        return bytes;
+    }
+
+
+
+    Map<Byte, String> decodeTree = new HashMap<>();
+    public void decodeFile(){
+        byte[] fileByteArr = readFromFile("C:\\Users\\Evgenia\\IdeaProjects\\OTIKLab2\\ResultsCode\\ttt3.bin");
+//        String s1 = Integer.toBinaryString(((Byte)(fileByteArr[0])).intValue());
+        int treeSize = Byte.toUnsignedInt(fileByteArr[0]);
+//        String s1 = Integer.toHexString(treeSize);
+        for(int i = 1; i < treeSize+1; i+=3){
+            int bits = Byte.toUnsignedInt(fileByteArr[i+1]);
+            String s1 = Integer.toBinaryString(Byte.toUnsignedInt(fileByteArr[i+2]));
+            String s2 = getFull8bitByte(s1).substring(0, bits);
+            decodeTree.put(fileByteArr[i], s2);
+        }
+        decodeTree.size();
+        readMsg(fileByteArr, treeSize);
+    }
+    private String getFull8bitByte(String s){
+        if(s.length() < 8){
+            int r = 8-s.length();
+            StringBuilder sb = new StringBuilder();
+            for(int k = 0; k < r; k++){
+                sb.append("0");
+            }
+            sb.append(s);
+            s = sb.toString();
+        }
+        return s;
+    }
+
+    ArrayList<Byte> resultDecodeByteS = new ArrayList<>();
+
+    int escape;
+    boolean hasEscape = false;
+
+    public void readMsg(byte[] arr, int beginPos){
+        ArrayList<Integer> bits = new ArrayList<>();
+        for(int i = beginPos + 1; i < arr.length; i++){
+            String byte1 = Integer.toBinaryString(Byte.toUnsignedInt(arr[i]));
+            char[] ch = getFull8bitByte(byte1).toCharArray();
+            for(int k = 0; k < ch.length;  k++){
+                bits.add(Integer.valueOf(String.valueOf(ch[k])));
+            }
+        }
+
+        int countBits = 0;
+        Map<Byte, String> map = new HashMap<>();
+
+        for(int i = 0; i < bits.size(); i++){
+//            if(i <= 25 && i > 20){
+//                System.out.println("here");
+//            }
+            int bit = bits.get(i);
+            if(countBits == 0) {
+                decodeTree.entrySet().stream().filter(entry -> entry.getValue().startsWith(String.valueOf(bit))).forEach(entry -> {
+                    map.put(entry.getKey(), entry.getValue());
+                });
+                if(hasEscape) {
+                    if (map.containsKey(escape)) {
+                        map.remove(escape);
+                    }
+                }
+                countBits++;
+
+            }else {
+
+                final int t = countBits;
+//                set2 = map.entrySet().stream().filter(entry -> {
+//                    if(entry.getValue().length()-1 == t && entry.getValue().substring(t,t+1).equals(String.valueOf(bit))){
+//                        return true;
+//                    }else return false;
+//
+//                }).collect(Collectors.toCollection(HashSet :: new));
+//                if (set2.isEmpty()){
+                HashSet<Map.Entry<Byte, String>> set1 = map.entrySet().stream().filter((entry) -> {
+                    if(entry.getValue().length() > t){
+                        return !entry.getValue().substring(t, t + 1).equals(String.valueOf(bit));
+                    }else return true;
+                }).collect(Collectors.toCollection(HashSet :: new));
+
+                set1.stream().forEach(e -> map.remove(e.getKey()));
+//                }else {
+//                    map.clear();
+//                    set2.stream().forEach(e -> map.put(e.getKey(), e.getValue()));
+//                }
+//                if(map.size() == 0){
+//                    set1.stream().min().forEach(e -> map.remove(e.getKey()));
+//                }
+                if(map.size() == 0){
+                    escape = set1.stream().filter( e ->  e.getValue().length()-1 >= t).findFirst().orElse(null).getKey();
+                    hasEscape = true;
+//                    int rollBackSyms = map.get(escape).length();
+                    i = i - (countBits);
+                    countBits = -1;
+                }
+                if(map.size() == 1){
+//                    final int[] willRead = {0};
+                    map.entrySet().stream().forEachOrdered((entry) -> {
+                        resultDecodeByteS.add(entry.getKey());
+//                        if(entry.getValue().length() == t)
+//                            willRead[0] = entry.getValue().substring(t+1).length();
+                    });
+                    if(map.get(resultDecodeByteS.get(resultDecodeByteS.size()-1)).length()-1 == t){
+                        map.clear();
+                        countBits = -1;
+                        hasEscape = false;
+                    }else resultDecodeByteS.remove(resultDecodeByteS.size()-1);
+
+                }
+
+                countBits++;
+            }
+        }
+
+
+        resultDecodeByteS.size();
+
+    }
+
+
+
+
+
+
+
+
+
 
 }

@@ -3,13 +3,12 @@ import java.io.File;
 public class Main {
 
     public static void main(String[] args) {
-        File fileDir = new File("C:\\Users\\Evgenia\\IdeaProjects\\OTIKLab2\\Texts");
-        File[] files = fileDir.listFiles();
-        for(File f : files){
             CodingClass codingClass = new CodingClass();
-            codingClass.countDelRepeats(codingClass.readFromFile(f.getPath()));
-            codingClass.returnCodeResults();
-        }
+            codingClass.countDelRepeats(codingClass.readFromFile("C:\\Users\\Evgenia\\IdeaProjects\\OTIKLab2\\Texts\\text1"));
+            codingClass.codeFile();
+            codingClass.PrintRes();
+
+        codingClass.decodeFile();
 
     }
 }
