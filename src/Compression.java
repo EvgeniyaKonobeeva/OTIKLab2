@@ -12,7 +12,6 @@ public class Compression {
     public static int COMPRESS_MODE = 0;
     public static int DECOMPRESS_MODE = 1;
 
-    private int selectedMode = 0;
     private String srcFilePath;
     private String dstFilePath;
 
@@ -24,7 +23,6 @@ public class Compression {
 
 
     public Compression(int mode, String srcFilePath, String dstFilePath){
-        selectedMode = mode;
         this.srcFilePath = srcFilePath;
         this.dstFilePath = dstFilePath;
 
@@ -184,13 +182,6 @@ public class Compression {
             os = new DataOutputStream(new FileOutputStream(dstFilePath));
             byte[] b = codeKeysMapToBytes(resultBytesCode);
             int size = b.length;
-
-//            int countSizes = 0;
-//            if(size > 255){
-//                countSizes = (int)Math.ceil(size/255.0);
-//            }
-//            os.write(((Integer)countSizes).byteValue());
-//            os.write();
             String sizeS = Integer.toBinaryString(size-1);
             int countMainBits = sizeS.length();
             byte[] sizeB = getBits(sizeS);
@@ -228,7 +219,7 @@ public class Compression {
         }
     }
 
-    /*разбивает полученную строку закодированных символов на байты
+    /*разбивает полученную строку битов на байты
     * если число байтов получается не целым, дополняет конец строки нулями*/
     private byte[] getBits(String str) {
         String s = "00000000";
@@ -239,7 +230,7 @@ public class Compression {
         byte[] b = new byte[byteArrSize];
         int count = 0;
 
-        /*делим полученную строку на байты по 8 цифр,
+        /*делим полученную строку на байты по 8 бит,
         переводим полученный двоичный код в целое число,
         и записываем его как байтовое значение
         тк мы делим строку ровно по 8 бит, то у нас не может получиться числа больше 255*/
@@ -252,9 +243,17 @@ public class Compression {
     }
 
     /*кодирует дерево, чтобы записать его в файл ввиде байтовой строки
-    * пишем символ, коорый кодируем
-    * пишем число 0 и 1 которое его кодирует
-    * записываем код символа в двоичном виде, дополняя его до нужного количества байто если необходимо*/
+    * пишем символ, коорый кодируем, тк мы кодируем байты, то пишем сразу байт
+    * пишем число битов, которое его кодирует в виде бйта
+    * записываем код символа в двоичном виде, дополняя его до нужного количества байтов
+     *
+    * пример записи одного символа и его кода в закодированном дереве :
+    * bf 07 7e
+    * bf - hex code сивола, который закодирован
+    * 07 - число битов, которые кодируют данный символ (если число битов которые кодируют символ больше 8, то биты записываются в виде нескольких байтов)
+    * 7e - байт, двоичное представление которого, после обработки функцией getFull8bitByte - есть код символа
+    *
+    * */
     public byte[] codeKeysMapToBytes( Map<Byte, ArrayList<Integer>> map){
         ArrayList<Byte> b = new ArrayList<>();
         for(Map.Entry<Byte, ArrayList<Integer>> entry : map.entrySet()){
@@ -279,8 +278,9 @@ public class Compression {
     Map<Byte, String> decodeTree = new HashMap<>();
 
     /*декодируем файл
-    * считываем первый байт - размер закодированного дерева
-    *
+    * считываем первый байт - число битов используемое для кодирования дерева
+    *  дальше считываем все байты в которых записана длина закодированного дерева
+    *  дальше считываем и декодируем сообщение
     * */
     public void decodeFile(byte[] fileByteArr){
         int countMainBits = Byte.toUnsignedInt(fileByteArr[0]);
@@ -298,7 +298,7 @@ public class Compression {
 
 
         for(int i = t+1; i < treeSize+t+2; i+=3){
-            // считываем число 0 и 1 которыми закодировли символ
+            // считываем число битов которыми закодировли символ
             int bits = Byte.toUnsignedInt(fileByteArr[i+1]);
 
             String s1;
@@ -322,6 +322,7 @@ public class Compression {
         }
         decodeTree.size();
 
+        /*запись дерева в файл*/
         DataOutputStream os = null;
         try {
             os = new DataOutputStream(new FileOutputStream("C:\\Users\\Evgenia\\IdeaProjects\\OTIKLab2\\Texts\\decodeTree"));
@@ -340,13 +341,23 @@ public class Compression {
             ioe.printStackTrace();
         }
 
+
+        /*считываем и декодируем сообщение файлв*/
         readMsg(fileByteArr, treeSize+t+2);
+
         System.out.println(treeSize+t+2);
     }
 
 
     /*так как при трансформаци двоичного кода символа, нули стоящие в начале отбрасываются,
-     то что бы их получить, мы их добавляем*/
+     то что бы их получить, мы их добавляем
+
+     например, у нас есть символ -128, который кодируется битами 00110
+     при записи кода этого символа в декодированное дерево, мы дополняем 5 бит кода до полноценных 8 битов байта (получаем 00110000)
+     после записи этого байта в файл первые нули отбросятся и в файл запиштся байт 110000
+     когда мы получим этот байт, мы дополним его нулями с начала строки, до получения 8 битного байта (получим после дополнения 00110000)
+     чтобы получить полноценный код символа -128, мы должны полученный и дополненный байт обрезать по размеру исходного кода, который был равен 5ти
+     после обрезания (обрезаем 00110000 с 0 до 5 символов) получим код символа 00110*/
     private String getFull8bitByte(String s){
         if(s.length() < 8){
             int r = 8-s.length();
@@ -372,15 +383,11 @@ public class Compression {
                 bits.add(Integer.valueOf(String.valueOf(ch[k])));
             }
         }
-/*
-* */
+
         int countBits = 0;
         Map<Byte, String> map = new HashMap<>(); // группа кодов, начальный символ которых совпадает с первым битом нового слова
 
         for(int i = 0; i < bits.size(); i++){
-//            if(i <= 25 && i > 20){
-//                System.out.println("here");
-//            }
             int bit = bits.get(i);
             if(countBits == 0) {
                 decodeTree.entrySet().stream().filter(entry -> entry.getValue().startsWith(String.valueOf(bit))).forEach(entry -> {
@@ -391,13 +398,7 @@ public class Compression {
             }else {
 
                 final int t = countBits;
-//                set2 = map.entrySet().stream().filter(entry -> {
-//                    if(entry.getValue().length()-1 == t && entry.getValue().substring(t,t+1).equals(String.valueOf(bit))){
-//                        return true;
-//                    }else return false;
-//
-//                }).collect(Collectors.toCollection(HashSet :: new));
-//                if (set2.isEmpty()){
+
                 HashSet<Map.Entry<Byte, String>> set1 = map.entrySet().stream().filter((entry) -> {
                     if(entry.getValue().length() > t){
                         return !entry.getValue().substring(t, t + 1).equals(String.valueOf(bit));
@@ -405,18 +406,10 @@ public class Compression {
                 }).collect(Collectors.toCollection(HashSet :: new));
 
                 set1.stream().forEach(e -> map.remove(e.getKey()));
-//                }else {
-//                    map.clear();
-//                    set2.stream().forEach(e -> map.put(e.getKey(), e.getValue()));
-//                }
-//                if(map.size() == 0){
-//                    set1.stream().min().forEach(e -> map.remove(e.getKey()));
-//                }
+
                 if(map.size() == 1){
                     map.entrySet().stream().forEachOrdered((entry) -> {
                         resultDecodeByteS.add(entry.getKey());
-//                        if(entry.getValue().length() == t)
-//                            willRead[0] = entry.getValue().substring(t+1).length();
                     });
                     if(map.get(resultDecodeByteS.get(resultDecodeByteS.size()-1)).length()-1 == t){
                         map.clear();
